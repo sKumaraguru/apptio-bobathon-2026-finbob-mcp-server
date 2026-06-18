@@ -1,0 +1,38 @@
+[project]
+name = "assessments-mcp"
+version = "0.1.0"
+description = "MCP Server for CSA Assessment Reports - provides MCP tools to query and analyze AWS cost assessment reports"
+readme = "../README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "pydantic>=2.0.0",
+  "fastmcp>=0.2.0",
+  "httpx>=0.25.0",
+  "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "black>=23.0.0",
+  "ruff>=0.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=. --cov-report=term-missing"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]

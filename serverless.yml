@@ -1,0 +1,425 @@
+service: csa-assessments-mcp
+frameworkVersion: "3"
+
+plugins:
+  - serverless-python-requirements
+  - serverless-plugin-vpc-eni-cleanup
+
+custom:
+  s3CacheBucket: csa-assessments-cache-${opt:stage}
+  logRetentionInDays: 7
+  pythonRequirements:
+    layer: false # Disable layer - package dependencies directly in function
+    slim: true # Remove unnecessary files (*.pyc, __pycache__, tests, docs)
+    strip: true # Strip debug symbols from .so files
+    zip: true # Compress dependencies
+    fileName: backend/requirements.txt
+    vendor: backend/vendor
+    useStaticCache: false
+    useDownloadCache: false
+    # NO dockerizePip - use local pip with CodeArtifact access
+    noDeploy:
+      - boto3 # Already provided by Lambda
+      - botocore # Already provided by Lambda
+      - docutils # Already provided by Lambda
+      - jmespath # Already provided by Lambda
+      - pip # Already provided by Lambda
+      - python-dateutil # Already provided by Lambda
+      - s3transfer # Already provided by Lambda
+      - setuptools # Already provided by Lambda
+      - six # Already provided by Lambda
+      - urllib3 # Already provided by Lambda
+      - pytest # Test framework not needed in production
+      - pytest-* # Test plugins
+      - black # Code formatter
+      - mypy # Type checker
+      - pylint # Linter
+      - flake8 # Linter
+      - ipython # Interactive shell
+      - jupyter # Notebook
+    pipCmdExtraArgs:
+      - --no-cache-dir # Don't use pip cache for clean builds
+      - --platform=manylinux2014_aarch64
+      - "--only-binary=:all:"
+      - --python-version=3.13
+      - --implementation=cp
+
+package:
+  patterns:
+    - "!backend/.venv/**"
+    - "!backend/venv/**"
+    - "!mcp/.venv/**"
+    - "!mcp/venv/**"
+    - "!node_modules/**"
+    - "!tests/**"
+    - "!test_*.py"
+    - "!*.pyc"
+    - "!__pycache__/**"
+    - "!.pytest_cache/**"
+    - "!.git/**"
+    - "!.gitignore"
+    - "!README.md"
+    - "!*.md"
+    - "!sample-assessments-assets/**"
+    - "!backend/vendor/**"
+    - "!backend/**/__pycache__/**"
+    - "!backend/**/*.pyc"
+    - "!backend/**/.pytest_cache/**"
+    - "!backend/**/tests/**"
+    - "!**/.vscode/**"
+    - "!**/.DS_Store"
+    - "!.env*"
+    - "!package.json"
+    - "!pnpm-lock.yaml"
+    - "!mcp/**"
+    - "!scripts/**"
+    - "!backend/**/*.md"
+    - "!backend/pyproject.toml"
+    - "!backend/uv.lock"
+
+provider:
+  name: aws
+  runtime: python3.13
+  versionFunctions: false
+  memorySize: 3008
+  timeout: 300
+  architecture: arm64
+
+  environment:
+    AWS_STS_REGIONAL_ENDPOINTS: regional
+    env: ${opt:stage}
+    region: ${opt:region}
+    app_name: ${self:service}
+    log_level: "INFO"
+    S3_CACHE_BUCKET: ${self:custom.s3CacheBucket}
+    CSA_AZURE_TENANT_ID: ${env:CSA_AZURE_TENANT_ID}
+    CSA_AZURE_CLIENT_ID: ${env:CSA_AZURE_CLIENT_ID}
+    CSA_AZURE_CLIENT_SECRET: ${env:CSA_AZURE_CLIENT_SECRET}
+    CSA_SHAREPOINT_SITE_ID: ${env:CSA_SHAREPOINT_SITE_ID}
+    CSA_REPORTS_SHAREPOINT_SITES: ${env:CSA_REPORTS_SHAREPOINT_SITES}
+
+  iam:
+    role: ${ssm:/${opt:stage}/service_role_arn}
+
+  vpc:
+    securityGroupIds:
+      - ${ssm:/${opt:stage}/vpc/sg/internal}
+    subnetIds: ${ssm:/${opt:stage}/vpc/subnet/private/subnets}
+
+  apiGateway:
+    minimumCompressionSize: 1024
+
+  deploymentBucket:
+    name: ${ssm:/${opt:stage}/serverless/slsDeploymentBucket}
+    blockPublicAccess: true
+
+  tags:
+    Service: csa-assessments-mcp
+    Environment: ${param:ENVIRONMENT_TAG}
+
+  stackTags:
+    Service: csa-assessments-mcp
+    Environment: ${param:ENVIRONMENT_TAG}
+
+functions:
+  assessmentBackend:
+    handler: backend.lambda_handler.handler
+    description: CSA Assessment Reports Backend - SharePoint and Excel processing
+    # Layer removed - dependencies packaged directly in function
+    events:
+      - http:
+          path: /api/{proxy+}
+          method: ANY
+          cors:
+            allowCredentials: true
+            origins:
+              - "*"
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+      - http:
+          path: /api
+          method: ANY
+          cors:
+            allowCredentials: true
+            origins:
+              - "*"
+
+resources:
+  Resources:
+    # ECS Cluster
+    EcsCluster:
+      Type: AWS::ECS::Cluster
+      Properties:
+        ClusterName: ${self:service}-${opt:stage}-cluster
+        ClusterSettings:
+          - Name: containerInsights
+            Value: enabled
+        Tags:
+          - Key: Service
+            Value: csa-assessments-mcp
+          - Key: Environment
+            Value: ${param:ENVIRONMENT_TAG}
+
+    # ECS Execution Role (for pulling ECR images and CloudWatch logs)
+    EcsExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ${self:service}-${opt:stage}-ecs-execution-role
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: ecs-tasks.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        Tags:
+          - Key: Service
+            Value: csa-assessments-mcp
+          - Key: Environment
+            Value: ${param:ENVIRONMENT_TAG}
+
+    # ECS Task Definition
+    FargateTaskDefinition:
+      Type: AWS::ECS::TaskDefinition
+      Properties:
+        Family: ${self:service}-${opt:stage}-mcp-task
+        Cpu: "256"
+        Memory: "512"
+        NetworkMode: awsvpc
+        RequiresCompatibilities:
+          - FARGATE
+        RuntimePlatform:
+          CpuArchitecture: ARM64
+          OperatingSystemFamily: LINUX
+        ExecutionRoleArn: !GetAtt EcsExecutionRole.Arn
+        TaskRoleArn: ${ssm:/${opt:stage}/service_role_arn}
+        ContainerDefinitions:
+          - Name: mcp-server-container
+            Image: ${aws:accountId}.dkr.ecr.${aws:region}.amazonaws.com/${self:service}-${opt:stage}-mcpserver:latest
+            Essential: true
+            PortMappings:
+              - ContainerPort: 3000
+                HostPort: 3000
+                Protocol: tcp
+            Environment:
+              - Name: BACKEND_SERVICE_URL
+                Value: !Sub "https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${opt:stage}"
+              - Name: MCP_SERVER_PORT
+                Value: "3000"
+              - Name: CSA_AZURE_TENANT_ID
+                Value: ${env:CSA_AZURE_TENANT_ID}
+              - Name: CSA_AZURE_CLIENT_ID
+                Value: ${env:CSA_AZURE_CLIENT_ID}
+              - Name: CSA_AZURE_CLIENT_SECRET
+                Value: ${env:CSA_AZURE_CLIENT_SECRET}
+              - Name: CSA_SHAREPOINT_SITE_ID
+                Value: ${env:CSA_SHAREPOINT_SITE_ID}
+              - Name: CSA_REPORTS_SHAREPOINT_SITES
+                Value: ${env:CSA_REPORTS_SHAREPOINT_SITES}
+            LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-group: !Ref ECSLogGroup
+                awslogs-region: !Ref AWS::Region
+                awslogs-stream-prefix: mcp-server
+        Tags:
+          - Key: Service
+            Value: csa-assessments-mcp
+          - Key: Environment
+            Value: ${param:ENVIRONMENT_TAG}
+
+    # ECS Service
+    FargateService:
+      Type: AWS::ECS::Service
+      DependsOn:
+        - McpHttpApiIntegration
+      Properties:
+        ServiceName: ${self:service}-${opt:stage}-mcp-service
+        Cluster: !Ref EcsCluster
+        DesiredCount: 1
+        LaunchType: FARGATE
+        TaskDefinition: !Ref FargateTaskDefinition
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            AssignPublicIp: DISABLED
+            Subnets:
+              - ${ssm:/${opt:stage}/vpc/subnet/private/az1}
+              - ${ssm:/${opt:stage}/vpc/subnet/private/az2}
+            SecurityGroups:
+              - ${ssm:/${opt:stage}/vpc/sg/internal}
+        ServiceRegistries:
+          - RegistryArn: !GetAtt McpCloudMapService.Arn
+            ContainerName: mcp-server-container
+            ContainerPort: 3000
+        Tags:
+          - Key: Service
+            Value: csa-assessments-mcp
+          - Key: Environment
+            Value: ${param:ENVIRONMENT_TAG}
+
+    CacheBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.s3CacheBucket}
+        LifecycleConfiguration:
+          Rules:
+            - Id: DeleteAfter4Hours
+              Status: Enabled
+              ExpirationInDays: 1
+              NoncurrentVersionExpirationInDays: 1
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+
+    ECSLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /ecs/csa-assessments-mcp-${opt:stage}
+        RetentionInDays: 7
+
+    # Cloud Map Private DNS Namespace
+    McpCloudMapNamespace:
+      Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+      Properties:
+        Name: mcp.local
+        Vpc: vpc-009a30580f83508e4
+        Tags:
+          - Key: Service
+            Value: csa-assessments-mcp
+          - Key: Environment
+            Value: ${param:ENVIRONMENT_TAG}
+
+    # Cloud Map Service for MCP server discovery
+    McpCloudMapService:
+      Type: AWS::ServiceDiscovery::Service
+      Properties:
+        Name: mcp-server  
+        DnsConfig:
+          RoutingPolicy: MULTIVALUE
+          DnsRecords:
+            - Type: A
+              TTL: 60
+            - Type: SRV
+              TTL: 60
+        NamespaceId: !Ref McpCloudMapNamespace
+        HealthCheckCustomConfig:
+          FailureThreshold: 1
+        Tags:
+          - Key: Service
+            Value: csa-assessments-mcp
+          - Key: Environment
+            Value: ${param:ENVIRONMENT_TAG}
+
+    # VPC Link for API Gateway to VPC connectivity
+    McpVpcLink:
+      Type: AWS::ApiGatewayV2::VpcLink
+      Properties:
+        Name: ${self:service}-${opt:stage}-mcp-vpclink-v2
+        SubnetIds: ${ssm:/${opt:stage}/vpc/subnet/private/subnets}
+        SecurityGroupIds:
+          - ${ssm:/${opt:stage}/vpc/sg/internal}
+        Tags:
+          Service: csa-assessments-mcp
+          Environment: ${param:ENVIRONMENT_TAG}
+
+    # HTTP API (v2) for MCP Server with SSE support
+    McpHttpApi:
+      Type: AWS::ApiGatewayV2::Api
+      Properties:
+        Name: ${self:service}-${opt:stage}-mcp-http-api
+        ProtocolType: HTTP
+        Description: HTTP API for MCP Server with SSE support
+        CorsConfiguration:
+          AllowOrigins:
+            - "*"
+          AllowMethods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+            - X-Api-Key
+            - Accept
+            - Cache-Control
+          # AllowCredentials: true
+          MaxAge: 300
+        Tags:
+          Service: csa-assessments-mcp
+          Environment: ${param:ENVIRONMENT_TAG}
+
+    # HTTP API Integration to Cloud Map service via VPC Link
+    McpHttpApiIntegration:
+      Type: AWS::ApiGatewayV2::Integration
+      Properties:
+        ApiId: !Ref McpHttpApi
+        IntegrationType: HTTP_PROXY
+        IntegrationMethod: ANY
+        IntegrationUri: !GetAtt McpCloudMapService.Arn
+        ConnectionType: VPC_LINK
+        ConnectionId: !Ref McpVpcLink
+        PayloadFormatVersion: "1.0"
+        TimeoutInMillis: 30000
+
+    # HTTP API Route for /mcp/{proxy+}
+    McpHttpApiRoute:
+      Type: AWS::ApiGatewayV2::Route
+      Properties:
+        ApiId: !Ref McpHttpApi
+        RouteKey: "ANY /mcp/{proxy+}"
+        Target: !Sub "integrations/${McpHttpApiIntegration}"
+
+    # HTTP API Route for /mcp
+    McpHttpApiRootRoute:
+      Type: AWS::ApiGatewayV2::Route
+      Properties:
+        ApiId: !Ref McpHttpApi
+        RouteKey: "ANY /mcp"
+        Target: !Sub "integrations/${McpHttpApiIntegration}"
+
+    # HTTP API Stage
+    McpHttpApiStage:
+      Type: AWS::ApiGatewayV2::Stage
+      Properties:
+        ApiId: !Ref McpHttpApi
+        StageName: "$default"
+        AutoDeploy: true
+        Description: ${opt:stage} stage for MCP HTTP API
+        Tags:
+          Service: csa-assessments-mcp
+          Environment: ${param:ENVIRONMENT_TAG}
+
+  Outputs:
+    BackendApiUrl:
+      Description: Backend API Gateway URL (REST API for Lambda)
+      Value: !Sub "https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${opt:stage}/api"
+
+    McpServerUrl:
+      Description: MCP Server URL (HTTP API for Fargate with SSE support)
+      Value: !Sub "https://${McpHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${opt:stage}/mcp"
+
+    EcsClusterName:
+      Description: ECS Cluster Name
+      Value: !Ref EcsCluster
+
+    EcsServiceName:
+      Description: ECS Service Name
+      Value: !GetAtt FargateService.Name
+
+    McpCloudMapServiceArn:
+      Description: Cloud Map Service ARN for MCP Server
+      Value: !GetAtt McpCloudMapService.Arn
+
+    McpVpcLinkId:
+      Description: VPC Link ID for MCP Server
+      Value: !Ref McpVpcLink
+
+# Made with Bob

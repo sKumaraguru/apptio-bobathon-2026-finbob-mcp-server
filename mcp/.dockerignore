@@ -1,0 +1,64 @@
+# Python cache files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Virtual environments
+.venv
+venv
+env
+ENV
+
+# Testing
+.pytest_cache
+.coverage
+.tox
+htmlcov
+*.cover
+.hypothesis
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README*
+CHANGELOG*
+LICENSE*
+docs/
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Development files
+tests/
+test_*.py
+*_test.py
+
+# Lock files (already have requirements.txt)
+uv.lock
+poetry.lock
+Pipfile.lock
+
+# Misc
+.env
+.env.*
+*.log
+tmp/
+temp/
+
+# Made with Bob

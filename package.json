@@ -1,0 +1,21 @@
+{
+  "name": "csa-assessments-mcp-deployment",
+  "version": "1.0.0",
+  "description": "Serverless deployment configuration for CSA Assessments MCP Server",
+  "scripts": {
+    "prepare": "./scripts/prepare-deployment.sh",
+    "deploy": "dotenv -e .env -- ./scripts/deploy-with-docker.sh dev1 us-west-2",
+    "deploy:serverless-only": "serverless deploy --stage dev",
+    "remove": "serverless remove --stage dev",
+    "logs": "serverless logs -f assessmentBackend --stage dev --tail"
+  },
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-fargate": "^1.1.0",
+    "serverless-plugin-vpc-eni-cleanup": "^1.0.0",
+    "serverless-python-requirements": "^6.1.0"
+  },
+  "dependencies": {
+    "dotenv-cli": "^11.0.0"
+  }
+}
