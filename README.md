@@ -54,37 +54,6 @@ Each assessment report is an Excel file with **49 sheets** containing compute us
 
 ### Time Comparison: Manual vs Bob-Assisted
 
-```mermaid
-gantt
-    title Manual Process (30-70 min per report)
-    dateFormat X
-    axisFormat %s min
-
-    section Manual Steps
-    Navigate SharePoint & find correct site   :a, 0, 8
-    Locate report among hundreds of files     :b, after a, 10
-    Download Excel file (50-100MB)            :c, after b, 5
-    Open & identify relevant sheets (49 tabs) :d, after c, 10
-    Extract metrics from Executive Summary    :e, after d, 10
-    Copy data into PowerPoint/Word            :f, after e, 10
-    Format & review deliverable               :g, after f, 7
-```
-
-```mermaid
-gantt
-    title Bob-Assisted Process (2-3 min)
-    dateFormat X
-    axisFormat %s sec
-
-    section Automated Steps
-    User asks Bob in natural language       :a, 0, 5
-    MCP searches all 3 sites in parallel    :b, after a, 10
-    Download and cache Excel from SharePoint :c, after b, 25
-    Extract and structure metrics            :d, after c, 15
-    LLM generates formatted deliverable     :e, after d, 50
-    Output files created                    :f, after e, 15
-```
-
 | Step | Manual | With Bob |
 |------|--------|----------|
 | Find the right report | 8-18 min (navigate SharePoint, guess which site) | 10 sec (parallel search across all sites) |
@@ -93,6 +62,22 @@ gantt
 | Extract & format metrics | 15-20 min | 15 sec |
 | Create deliverable | 10-15 min | 60 sec (LLM streaming + file generation) |
 | **Total** | **30-70 min** | **~2-3 min** |
+
+```mermaid
+graph LR
+    subgraph BEFORE[" Manual Process "]
+        B[Navigate SharePoint<br/>Download Excel<br/>Find data in 49 sheets<br/>Copy to PowerPoint<br/><br/>30-70 minutes]
+    end
+
+    subgraph AFTER[" Bob-Assisted Process "]
+        A[Ask Bob in natural language<br/>Auto-fetch, extract, generate<br/><br/>2-3 minutes]
+    end
+
+    BEFORE -->|~95x faster| AFTER
+
+    style B fill:#e53e3e,color:#fff
+    style A fill:#38a169,color:#fff
+```
 
 ## Architecture
 
