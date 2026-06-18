@@ -17,11 +17,11 @@ graph LR
     C -->|REST API| D[Backend Service]
     D -->|OAuth 2.0| E[SharePoint]
 
-    style A fill:#e1f5ff
-    style B fill:#fff3e0
-    style C fill:#f3e5f5
-    style D fill:#e8f5e9
-    style E fill:#fff9c4
+    style A fill:#4a9eff,color:#fff
+    style B fill:#ff8c42,color:#fff
+    style C fill:#a855f7,color:#fff
+    style D fill:#22c55e,color:#fff
+    style E fill:#eab308,color:#000
 ```
 
 ## Business Value
@@ -38,8 +38,8 @@ graph LR
 
     BEFORE -->|95% time savings| AFTER
 
-    style B fill:#ffcdd2
-    style A fill:#c8e6c9
+    style B fill:#e53e3e,color:#fff
+    style A fill:#38a169,color:#fff
 ```
 
 ## Architecture
@@ -76,9 +76,9 @@ graph TB
     FARGATE -->|calls| REST
     LAMBDA --> SP
 
-    style LAMBDA fill:#e8f5e9
-    style FARGATE fill:#f3e5f5
-    style SP fill:#fff9c4
+    style LAMBDA fill:#22c55e,color:#fff
+    style FARGATE fill:#a855f7,color:#fff
+    style SP fill:#eab308,color:#000
 ```
 
 | Component | Runtime | Purpose |
@@ -211,10 +211,10 @@ flowchart LR
     D -->|Pitch Deck| F[.docx + .pptx]
     D -->|Dashboard| G[Interactive .html]
 
-    style A fill:#e1f5ff
-    style D fill:#fff3e0
-    style F fill:#c8e6c9
-    style G fill:#c8e6c9
+    style A fill:#4a9eff,color:#fff
+    style D fill:#ff8c42,color:#fff
+    style F fill:#38a169,color:#fff
+    style G fill:#38a169,color:#fff
 ```
 
 ### MCP Server Connection
@@ -308,11 +308,11 @@ graph TB
     BE -->|Parallel Search| S3[Site 3: Region 2<br/>Assessment Reports]
     BE -->|Parallel Search| S4[Site 4: Region 3<br/>Assessment Reports]
 
-    style BE fill:#c8e6c9
-    style S1 fill:#fff9c4
-    style S2 fill:#e1f5ff
-    style S3 fill:#e1f5ff
-    style S4 fill:#e1f5ff
+    style BE fill:#22c55e,color:#fff
+    style S1 fill:#eab308,color:#000
+    style S2 fill:#4a9eff,color:#fff
+    style S3 fill:#4a9eff,color:#fff
+    style S4 fill:#4a9eff,color:#fff
 ```
 
 - Users don't need to know which site holds their data
