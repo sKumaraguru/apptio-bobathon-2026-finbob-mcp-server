@@ -24,23 +24,75 @@ graph LR
     style E fill:#eab308,color:#000
 ```
 
-## Business Value
+## SharePoint Data Layout
+
+Assessment reports are distributed across 4 SharePoint sites. The primary site holds master reports (consolidated portfolio data), while the other 3 sites share the volume of individual assessment reports across all organizations and payer accounts.
 
 ```mermaid
-graph LR
-    subgraph BEFORE[" Before: Manual Process "]
-        B[Navigate SharePoint → Download Excel → Find sheets → Extract data → Create PowerPoint<br/><br/>⏱️ 30-70 minutes per report<br/>❌ Error prone, not scalable]
+graph TB
+    subgraph "SharePoint Online — 4 Sites"
+        S1[🗂️ Primary Site: CSAReporting<br/>Master Reports only<br/>Portfolio-wide consolidated data]
+
+        S2[📄 Site 2: CSAReporting 2<br/>Assessment Reports<br/>About one-third of all payer accounts]
+        S3[📄 Site 3: CSAReporting 3<br/>Assessment Reports<br/>About one-third of all payer accounts]
+        S4[📄 Site 4: CSAReporting 4<br/>Assessment Reports<br/>About one-third of all payer accounts]
     end
 
-    subgraph AFTER[" After: With MCP + Bob "]
-        A[Ask Bob in natural language<br/><br/>⏱️ 15-20 seconds<br/>✅ Accurate, scalable]
-    end
+    S1 ~~~ S2
+    S2 ~~~ S3
+    S3 ~~~ S4
 
-    BEFORE -->|95% time savings| AFTER
-
-    style B fill:#e53e3e,color:#fff
-    style A fill:#38a169,color:#fff
+    style S1 fill:#eab308,color:#000
+    style S2 fill:#4a9eff,color:#fff
+    style S3 fill:#4a9eff,color:#fff
+    style S4 fill:#4a9eff,color:#fff
 ```
+
+Each assessment report is an Excel file with **49 sheets** containing compute usage, savings plans, reserved instances, planning models, and projections. Reports are split across 3 sites to manage SharePoint's file volume limits.
+
+## Business Value
+
+### Time Comparison: Manual vs Bob-Assisted
+
+```mermaid
+gantt
+    title Manual Process (30-70 min per report)
+    dateFormat X
+    axisFormat %s min
+
+    section Manual Steps
+    Navigate SharePoint & find correct site   :a, 0, 8
+    Locate report among hundreds of files     :b, after a, 10
+    Download Excel file (50-100MB)            :c, after b, 5
+    Open & identify relevant sheets (49 tabs) :d, after c, 10
+    Extract metrics from Executive Summary    :e, after d, 10
+    Copy data into PowerPoint/Word            :f, after e, 10
+    Format & review deliverable               :g, after f, 7
+```
+
+```mermaid
+gantt
+    title Bob-Assisted Process (2-3 min)
+    dateFormat X
+    axisFormat %s sec
+
+    section Automated Steps
+    User asks Bob in natural language       :a, 0, 5
+    MCP searches all 3 sites in parallel    :b, after a, 10
+    Download and cache Excel from SharePoint :c, after b, 25
+    Extract and structure metrics            :d, after c, 15
+    LLM generates formatted deliverable     :e, after d, 50
+    Output files created                    :f, after e, 15
+```
+
+| Step | Manual | With Bob |
+|------|--------|----------|
+| Find the right report | 8-18 min (navigate SharePoint, guess which site) | 10 sec (parallel search across all sites) |
+| Download & open file | 7 min (50-100MB Excel) | 30 sec (server-side download, cached after first access) |
+| Locate data in 49 sheets | 10-15 min | 15 sec (structured extraction) |
+| Extract & format metrics | 15-20 min | 15 sec |
+| Create deliverable | 10-15 min | 60 sec (LLM streaming + file generation) |
+| **Total** | **30-70 min** | **~2-3 min** |
 
 ## Architecture
 
@@ -166,7 +218,7 @@ sequenceDiagram
     User->>Bob: "Create pitch deck for Apptio"
     Bob->>MCP: list_assessment_reports(org_id, year, month)
     MCP->>BE: POST /api/list_assessment_reports
-    BE->>SP: Search across 4 sites (parallel)
+    BE->>SP: Search across 3 assessment sites (parallel)
     SP-->>BE: Found report in Site 2
     BE-->>MCP: Report metadata with file_id
     MCP-->>Bob: Available reports
@@ -304,9 +356,9 @@ graph TB
     BE[Backend Service<br/>Dynamic Router]
 
     BE -->|Master Reports| S1[Site 1: CSAReporting<br/>Portfolio-wide data]
-    BE -->|Parallel Search| S2[Site 2: Region 1<br/>Assessment Reports]
-    BE -->|Parallel Search| S3[Site 3: Region 2<br/>Assessment Reports]
-    BE -->|Parallel Search| S4[Site 4: Region 3<br/>Assessment Reports]
+    BE -->|Parallel Search| S2[Site 2: CSAReporting 2<br/>About one-third of assessment reports]
+    BE -->|Parallel Search| S3[Site 3: CSAReporting 3<br/>About one-third of assessment reports]
+    BE -->|Parallel Search| S4[Site 4: CSAReporting 4<br/>About one-third of assessment reports]
 
     style BE fill:#22c55e,color:#fff
     style S1 fill:#eab308,color:#000
@@ -316,7 +368,8 @@ graph TB
 ```
 
 - Users don't need to know which site holds their data
-- Parallel queries across all assessment sites
+- Parallel queries across all 3 assessment sites
+- Reports distributed across sites to manage SharePoint file volume limits
 - Automatic caching with 4-hour TTL
 - Resilient — if one site is unavailable, others continue working
 
